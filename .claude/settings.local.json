@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(mkdir -p \"d:/Forge Quantum Solutions/Quantum Optimizer/server\")",
+      "Bash(npm init:*)",
+      "Bash(node -e \"const { PrismaClient } = require\\('@prisma/client'\\); const p = new PrismaClient\\(\\); console.log\\(Object.keys\\(p\\).filter\\(k => !k.startsWith\\('_'\\) && !k.startsWith\\('\\\\$'\\)\\)\\)\")",
+      "Bash(xargs cat:*)"
+    ]
+  }
+}

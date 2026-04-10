@@ -1,0 +1,15 @@
+# Never copy into the Docker image
+node_modules/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.git/
+.github/
+Dockerfile
+.dockerignore
+README.md

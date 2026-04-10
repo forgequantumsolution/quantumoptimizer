@@ -1,0 +1,47 @@
+repos:
+  # ─── Secret scanning ────────────────────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        name: Detect secrets (gitleaks)
+
+  # ─── Detect-secrets baseline ─────────────────────────────────────────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package-lock\.json
+
+  # ─── Prevent committing .env files ───────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: trailing-whitespace
+      - id: check-json
+      - id: check-yaml
+        args: ['--unsafe']
+
+  # ─── Node.js / TypeScript ─────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: eslint-server
+        name: ESLint (server)
+        entry: bash -c 'cd server && npx eslint --ext .ts src/'
+        language: system
+        files: server/src/.*\.(ts)$
+        pass_filenames: false
+
+      - id: eslint-client
+        name: ESLint (client)
+        entry: bash -c 'cd client && npx eslint src/'
+        language: system
+        files: client/src/.*\.(jsx?|tsx?)$
+        pass_filenames: false

@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CODEOWNERS — who must review and approve changes to each area
+# Format: <pattern>  <@github-user-or-team>
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Default owner for everything
+*                               @forgequantumsolution/backend-team
+
+# Security-sensitive files — require security team sign-off
+.github/workflows/              @forgequantumsolution/devops-team @forgequantumsolution/security-team
+server/src/middleware/auth.ts   @forgequantumsolution/security-team
+server/src/config/env.ts        @forgequantumsolution/security-team
+server/prisma/schema.prisma     @forgequantumsolution/backend-team @forgequantumsolution/dba-team
+scripts/deploy.sh               @forgequantumsolution/devops-team
+scripts/rollback.sh             @forgequantumsolution/devops-team
+Dockerfile                      @forgequantumsolution/devops-team
+docker-compose.yml              @forgequantumsolution/devops-team
+nginx/                          @forgequantumsolution/devops-team
+
+# Frontend
+client/                         @forgequantumsolution/frontend-team
+
+# Documentation
+docs/                           @forgequantumsolution/backend-team
+SECURITY.md                     @forgequantumsolution/security-team
