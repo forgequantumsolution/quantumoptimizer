@@ -19,6 +19,7 @@ export const ROUTES = {
   INTEGRATIONS: '/integrations',
   DATA_HUB: '/data-hub',
   CONSENSUS: '/consensus',
+  SUPPLY_PLANNING: '/supply-planning',
   ADMIN: '/admin',
 };
 

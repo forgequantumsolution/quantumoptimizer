@@ -382,3 +382,128 @@ enum PlanStatus {
   REJECTED
   LOCKED
 }
+
+// ─── Phase 4: Concurrent Supply Planning ─────────────────────────────────────
+
+model WorkCenter {
+  id              String           @id @default(cuid())
+  tenantId        String
+  name            String
+  capacityPerDay  Float            // units per day at 100% efficiency
+  efficiencyPct   Float            @default(0.85)
+  productionOrders ProductionOrder[]
+  createdAt       DateTime         @default(now())
+
+  @@index([tenantId])
+}
+
+model BillOfMaterials {
+  id           String   @id @default(cuid())
+  tenantId     String
+  parentId     String   // finished-good SKU id
+  childId      String   // component/raw-material SKU id
+  quantity     Float    // units of child required per 1 unit of parent
+  leadTimeDays Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, parentId, childId])
+  @@index([tenantId, parentId])
+}
+
+model SupplyPlan {
+  id               String           @id @default(cuid())
+  tenantId         String
+  name             String
+  demandPlanId     String           // links to approved PlanVersion
+  status           SupplyPlanStatus @default(DRAFT)
+  planStart        DateTime
+  planEnd          DateTime
+  createdBy        String
+  releasedBy       String?
+  releasedAt       DateTime?
+  rows             SupplyPlanRow[]
+  productionOrders ProductionOrder[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, demandPlanId])
+}
+
+model SupplyPlanRow {
+  id                 String     @id @default(cuid())
+  supplyPlanId       String
+  supplyPlan         SupplyPlan @relation(fields: [supplyPlanId], references: [id])
+  itemId             String
+  locationId         String
+  periodLabel        String     // ISO week e.g. "2026-W15"
+  periodDate         DateTime   // Monday of the week
+  demandQty          Float      // from approved consensus plan
+  openingStock       Float      // actual inventory at period start
+  safetyStock        Float      @default(0)
+  plannedProduction  Float      @default(0)
+  plannedPurchase    Float      @default(0)
+  closingStock       Float      // openingStock + production + purchase - demand
+  coverageDays       Float      @default(0)
+  isEdited           Boolean    @default(false)
+  editedBy           String?
+  editedAt           DateTime?
+  createdAt          DateTime   @default(now())
+
+  @@unique([supplyPlanId, itemId, locationId, periodLabel])
+  @@index([supplyPlanId, itemId])
+  @@index([supplyPlanId, periodLabel])
+}
+
+model ProductionOrder {
+  id            String           @id @default(cuid())
+  tenantId      String
+  supplyPlanId  String?
+  supplyPlan    SupplyPlan?      @relation(fields: [supplyPlanId], references: [id])
+  itemId        String
+  workCenterId  String
+  workCenter    WorkCenter       @relation(fields: [workCenterId], references: [id])
+  quantity      Float
+  startDate     DateTime
+  endDate       DateTime
+  status        ProductionStatus @default(PLANNED)
+  createdBy     String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, startDate])
+  @@index([workCenterId, startDate])
+}
+
+// Update ReplenishmentOrder to link to supply plans
+model ReplenishmentOrderV2 {
+  id           String      @id @default(cuid())
+  tenantId     String
+  supplyPlanId String?
+  itemId       String
+  locationId   String
+  quantity     Float
+  isAutomatic  Boolean     @default(true)
+  status       OrderStatus @default(PENDING)
+  approvedBy   String?
+  erpRef       String?
+  createdAt    DateTime    @default(now())
+
+  @@index([tenantId, status])
+  @@index([tenantId, supplyPlanId])
+}
+
+enum SupplyPlanStatus {
+  DRAFT
+  RELEASED
+  LOCKED
+}
+
+enum ProductionStatus {
+  PLANNED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}

@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Alerts', path: ROUTES.ALERTS, icon: '◎' },
   { label: 'Inventory', path: ROUTES.INVENTORY, icon: '▤' },
   { label: 'Consensus', path: ROUTES.CONSENSUS, icon: '◫' },
+  { label: 'Supply Planning', path: ROUTES.SUPPLY_PLANNING, icon: '⬡' },
   { label: 'Scenario Planner', path: ROUTES.SCENARIOS, icon: '◆' },
   { label: 'Compliance', path: ROUTES.COMPLIANCE, icon: '◉' },
   { label: 'Integrations', path: ROUTES.INTEGRATIONS, icon: '◈' },

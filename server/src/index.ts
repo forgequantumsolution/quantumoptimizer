@@ -22,6 +22,11 @@ import forecastRoutes from './modules/forecast/forecast.routes';
 import scenariosRoutes from './modules/scenarios/scenarios.routes';
 import integrationsRoutes from './modules/integrations/integrations.routes';
 import consensusRoutes from './modules/consensus/consensus.routes';
+import supplyRoutes from './modules/supply/supply.routes';
+
+// Event bus wiring
+import { eventBus } from './events/eventBus';
+import { generateSupplyPlan } from './modules/supply/supply.service';
 
 // Infrastructure routes
 import healthRoutes from './routes/health';
@@ -110,6 +115,7 @@ app.use('/api/forecasts',    forecastRoutes);
 app.use('/api/scenarios',    scenariosRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/consensus',    consensusRoutes);
+app.use('/api/supply',       supplyRoutes);
 
 // ─── 10. 404 handler ──────────────────────────────────────────────────────────
 app.use((_req, res) => {
@@ -118,6 +124,18 @@ app.use((_req, res) => {
 
 // ─── 11. Global error handler (must be last) ──────────────────────────────────
 app.use(errorHandler);
+
+// ─── Event bus listeners ──────────────────────────────────────────────────────
+// When a demand plan is approved, auto-generate a supply plan
+eventBus.onPlanApproved(async (event) => {
+  logger.info('[EventBus] PlanApproved received — generating supply plan', { planId: event.planId });
+  try {
+    await generateSupplyPlan(event.tenantId, event.planId, event.approvedBy);
+    logger.info('[EventBus] Supply plan auto-generated', { demandPlanId: event.planId });
+  } catch (err: any) {
+    logger.error('[EventBus] Failed to auto-generate supply plan', { error: err.message });
+  }
+});
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 const server = app.listen(env.port, () => {

@@ -11,6 +11,7 @@ import ScenarioPlannerPage from './pages/ScenarioPlannerPage';
 import AdminPage from './pages/AdminPage';
 import DataHubPage from './pages/DataHubPage';
 import ConsensusPage from './pages/ConsensusPage';
+import SupplyPlanningPage from './pages/SupplyPlanningPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/inventory" element={<P><InventoryPage /></P>} />
           <Route path="/scenarios" element={<P><ScenarioPlannerPage /></P>} />
           <Route path="/consensus" element={<P><ConsensusPage /></P>} />
+          <Route path="/supply-planning" element={<P><SupplyPlanningPage /></P>} />
           <Route path="/data-hub" element={<P><DataHubPage /></P>} />
           <Route path="/compliance" element={<P><DashboardPage /></P>} />
           <Route path="/integrations" element={<P><DashboardPage /></P>} />

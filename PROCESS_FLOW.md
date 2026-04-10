@@ -1,7 +1,7 @@
 # Quantum Optimizer — Platform Process Flow
 
 > **Living document.** Updated every time a feature, route, module, or data model changes.
-> Last updated: 2026-04-10 | Version: 1.3.0
+> Last updated: 2026-04-10 | Version: 1.4.0
 
 ---
 
@@ -20,6 +20,7 @@
    - 4.7 [Scenario Planner](#47-scenario-planner)
    - 4.8 [Dashboard](#48-dashboard)
    - 4.9 [Admin](#49-admin)
+   - 4.10 [Supply Planning](#410-supply-planning)
 5. [Data Architecture](#5-data-architecture)
 6. [API Reference](#6-api-reference)
 7. [Event Bus](#7-event-bus)
@@ -82,6 +83,7 @@ All data is scoped by `tenantId`. Users from Tenant A cannot access Tenant B dat
 | `/alerts` | | ✅ | | | |
 | `/inventory` | | ✅ | | | |
 | `/consensus` | | ✅ | Edit cells | Approve/Reject | |
+| `/supply-planning` | | ✅ | Edit rows, release | | |
 | `/scenarios` | | ✅ | | | |
 | `/compliance` | | ✅ | | | |
 | `/integrations` | | ✅ | | | |
@@ -132,13 +134,26 @@ All data is scoped by `tenantId`. Users from Tenant A cannot access Tenant B dat
   └────────────────────────────┬─────────────────────────────────────┘
                                │
                                ▼
-  PHASE 4 — SUPPLY ACTION (Alerts + Replenishment)
+  PHASE 4 — CONCURRENT SUPPLY PLANNING (Supply Planning)
   ┌──────────────────────────────────────────────────────────────────┐
-  │  PlanApproved event → triggers supply run                        │
-  │  Alerts generated: STOCKOUT_RISK, EXPIRY, OVERSTOCK,            │
-  │                    SUPPLIER_DELAY, AI_PLAN_READY                 │
-  │  ReplenishmentOrders: AUTO_APPROVED or HUMAN_APPROVED           │
-  │  → ERP sync (SAP PO reference)                                  │
+  │  PlanApproved event → auto-generates SupplyPlan (DRAFT)          │
+  │                                                                  │
+  │  MRP Engine (per SKU × location × week):                         │
+  │    Net Req = max(0, Demand + SafetyStock − OpeningStock)         │
+  │    PlannedProduction = ceil(NetReq / 100) × 100  [lot sizing]    │
+  │    ClosingStock = Opening + Production + Purchase − Demand       │
+  │                                                                  │
+  │  Production Board:                                               │
+  │    WorkCenters → ProductionOrders (Gantt view)                   │
+  │    Status: PLANNED → CONFIRMED → IN_PROGRESS → COMPLETED        │
+  │    Capacity utilisation % per work center                        │
+  │                                                                  │
+  │  Replenishment Orders:                                           │
+  │    Auto-generated from MRP net requirements                      │
+  │    Workflow: PENDING → AUTO_APPROVED / HUMAN_APPROVED            │
+  │    → DISPATCHED (ERP PO reference)                               │
+  │                                                                  │
+  │  Planner releases plan (DRAFT → RELEASED)                        │
   └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -419,6 +434,50 @@ AdminPage (SUPER_ADMIN only)
 
 ---
 
+### 4.10 Supply Planning
+
+```
+SupplyPlanningPage
+    │
+    ├─ Plan Selector
+    │       ├─ GET /api/supply/              → list supply plans
+    │       └─ POST /api/supply/             → generate from approved demand plan (MRP engine)
+    │                   (triggered automatically via PlanApproved event)
+    │
+    ├─ Tab: MRP Grid (SKU × week pivot)
+    │       ├─ GET /api/supply/:id           → supply plan with all SupplyPlanRows
+    │       ├─ Rows: Demand | Opening Stock | Safety Stock | Planned Production | Planned Purchase | Closing Stock | Coverage Days
+    │       ├─ Inline edit: plannedProduction, plannedPurchase (SUPPLY_PLANNER only)
+    │       ├─ PATCH /api/supply/:id/rows    → batch-save edits
+    │       └─ POST /api/supply/:id/release  → DRAFT → RELEASED (SUPPLY_PLANNER only)
+    │
+    ├─ Tab: Production Board (Gantt)
+    │       ├─ GET /api/supply/work-centers  → work center list with capacity
+    │       ├─ GET /api/supply/capacity      → utilisation % per work center
+    │       ├─ GET /api/supply/production-orders → production orders (filterable by supplyPlanId)
+    │       ├─ PATCH /api/supply/production-orders/:orderId/status    → change status
+    │       └─ PATCH /api/supply/production-orders/:orderId/reschedule → drag-drop reschedule
+    │
+    └─ Tab: Replenishment Orders
+            ├─ GET /api/supply/replenishment              → list all replenishment orders
+            ├─ POST /api/supply/replenishment/:id/approve → PENDING → HUMAN_APPROVED
+            └─ POST /api/supply/replenishment/:id/dispatch → HUMAN_APPROVED → DISPATCHED
+
+MRP Engine Logic (per SKU × location × week):
+  Net Requirement  = max(0, Demand + SafetyStock − OpeningStock)
+  Planned Production = ceil(NetReq / 100) × 100   [lot sizing: nearest 100]
+  Closing Stock    = Opening + Production + Purchase − Demand
+  Coverage Days    = ClosingStock / (Demand / 7)
+
+Role Gates:
+  View:         All authenticated roles
+  Edit rows:    SUPPLY_PLANNER, PRODUCTION_MANAGER, SUPER_ADMIN
+  Release plan: SUPPLY_PLANNER, SUPER_ADMIN
+  Approve replenishment: SUPPLY_PLANNER, SUPER_ADMIN
+```
+
+---
+
 ## 5. Data Architecture
 
 ### Core Models
@@ -433,7 +492,7 @@ SKU    (1) ──── (∞) Alert      ◄── Warehouse?
 User   (1) ──── (∞) AuditLog
 ```
 
-### Planning Models (Phase 2–3)
+### Planning Models (Phase 2–4)
 
 ```
 DemandHistory (itemId + locationId + date + channel @@unique)
@@ -442,11 +501,26 @@ DemandHistory (itemId + locationId + date + channel @@unique)
 ForecastResult (tenantId + itemId + locationId + forecastDate + modelUsed @@unique)
     │
     ▼
-PlanVersion (DRAFT → SUBMITTED → APPROVED)
+PlanVersion (DRAFT → SUBMITTED → APPROVED)          [Phase 3: Demand]
     │
     ├── PlanCell (planVersionId + itemId + locationId + periodLabel @@unique)
     │       └── PlanCellComment
-    └── PlanApproval (action trail)
+    ├── PlanApproval (action trail)
+    │
+    │  PlanApproved event fires ──────────────────────────────────────────┐
+    │                                                                      ▼
+    └──────────────────────────────────────────────────────────────────►  SupplyPlan (DRAFT → RELEASED → LOCKED)  [Phase 4: Supply]
+                                                                           │
+                                                                           ├── SupplyPlanRow (supplyPlanId + itemId + locationId + periodLabel @@unique)
+                                                                           │     Fields: demandQty | openingStock | safetyStock |
+                                                                           │             plannedProduction | plannedPurchase | closingStock | coverageDays
+                                                                           │
+                                                                           └── ProductionOrder → WorkCenter
+                                                                                 Status: PLANNED → CONFIRMED → IN_PROGRESS → COMPLETED
+
+BillOfMaterials (parentId + childId @@unique) — component relationships
+WorkCenter — production capacity units (capacityPerDay, efficiencyPct)
+ReplenishmentOrderV2 — linked to SupplyPlan, workflow: PENDING → AUTO_APPROVED → HUMAN_APPROVED → DISPATCHED
 ```
 
 ### Integration Models
@@ -524,6 +598,23 @@ All API endpoints are prefixed `/api/`. All routes except `/api/auth/*` require 
 | POST | /consensus/:id/reject | Reject with note (FINANCE/SUPER_ADMIN) |
 | GET | /consensus/cells/:cellId/comments | Get cell comments |
 | POST | /consensus/cells/:cellId/comments | Add comment |
+
+### Supply Planning
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /supply | List supply plans |
+| POST | /supply | Generate supply plan from approved demand plan (MRP) |
+| GET | /supply/work-centers | List work centers with capacity |
+| GET | /supply/capacity | Work center utilisation % |
+| GET | /supply/production-orders | List production orders |
+| GET | /supply/replenishment | List replenishment orders |
+| GET | /supply/:id | Supply plan detail with rows |
+| PATCH | /supply/:id/rows | Batch-save row edits (plannedProduction / plannedPurchase) |
+| POST | /supply/:id/release | Release plan (DRAFT → RELEASED) |
+| PATCH | /supply/production-orders/:orderId/status | Update production order status |
+| PATCH | /supply/production-orders/:orderId/reschedule | Reschedule (new startDate/endDate) |
+| POST | /supply/replenishment/:orderId/approve | Approve replenishment order |
+| POST | /supply/replenishment/:orderId/dispatch | Dispatch replenishment order |
 
 ### Scenarios
 | Method | Path | Description |
@@ -630,6 +721,20 @@ Stage 6 — Production:   Manual approval gate, blue/green deploy, post-deploy s
 > Append an entry here every time a feature, route, model, or flow changes.
 
 ---
+
+### v1.4.0 — 2026-04-10
+**Phase 4 — Concurrent Supply Planning**
+- New Prisma models: `WorkCenter`, `BillOfMaterials`, `SupplyPlan`, `SupplyPlanRow`, `ProductionOrder`, `ReplenishmentOrderV2`
+- New enums: `SupplyPlanStatus` (DRAFT/RELEASED/LOCKED), `ProductionStatus` (PLANNED/CONFIRMED/IN_PROGRESS/COMPLETED/CANCELLED)
+- New module: `server/src/modules/supply/` (service, controller, 13 routes)
+- New API: mounted at `/api/supply`
+- MRP engine: rolling net-requirements with 25% safety buffer, lot-sizing to nearest 100 units
+- Event listener: `PlanApproved → generateSupplyPlan()` auto-triggered on demand plan approval
+- New page: `SupplyPlanningPage.jsx` — 3 tabs: MRP Grid (pivot), Production Board (Gantt), Orders
+- New hooks: `useSupplyPlanning.js` (13 React Query hooks)
+- New route: `/supply-planning` added to App.jsx + Sidebar + constants
+- Capacity utilisation cards: per-work-center utilisation % strip on page header
+- Role gates: SUPPLY_PLANNER/PRODUCTION_MANAGER/SUPER_ADMIN can edit; SUPPLY_PLANNER/SUPER_ADMIN can release
 
 ### v1.3.0 — 2026-04-10
 **DevSecOps Transformation**
