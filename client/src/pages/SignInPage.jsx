@@ -33,12 +33,6 @@ export default function SignInPage() {
     }
   };
 
-  // Demo login helper
-  const demoLogin = async () => {
-    setForm({ email: 'planner@pharma.com', password: 'demo1234' });
-    setError('');
-  };
-
   return (
     <div className="min-h-screen bg-cream flex items-center justify-center px-4">
       <div className="w-full max-w-md">
@@ -91,23 +85,10 @@ export default function SignInPage() {
 
           <div className="mt-6 pt-6 border-t border-dark/10 text-center">
             <p className="font-ui text-xs text-muted mb-3">Don't have an account?</p>
-            <Button variant="outline" size="sm" onClick={() => document.getElementById('cta')?.scrollIntoView?.() || navigate('/')}>
+            <Button variant="outline" size="sm" onClick={() => navigate('/')}>
               Request a Demo
             </Button>
           </div>
-        </div>
-
-        {/* Demo hint */}
-        <div className="mt-6 bg-blue-light border border-blue/20 rounded-[8px] p-4">
-          <p className="font-ui text-xs font-semibold text-blue mb-2 uppercase tracking-wider">Demo Credentials</p>
-          <div className="space-y-1 font-ui text-[11px] text-blue/80">
-            <div className="flex justify-between"><span>Supply Planner (Pharma):</span><span>planner@pharma.com</span></div>
-            <div className="flex justify-between"><span>Super Admin:</span><span>admin@pharma.com</span></div>
-            <div className="flex justify-between"><span>Password:</span><span>demo1234</span></div>
-          </div>
-          <button onClick={demoLogin} className="mt-3 font-ui text-[11px] text-blue font-semibold hover:underline">
-            Fill demo credentials →
-          </button>
         </div>
       </div>
       <ToastContainer />
